@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Disk Scheduling Visualizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --primary: #007bff;
+      --primary-dark: #0056b3;
+      --bg: #f4f6f8;
+      --container-bg: #ffffff;
+      --text-color: #333;
+      --header-color: #004080;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-color);
+      padding: 20px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    header h1 {
+      font-size: 2.2rem;
+      color: var(--header-color);
+    }
+    .container {
+      max-width: 850px;
+      margin: 0 auto;
+      background: var(--container-bg);
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+    label {
+      display: block;
+      margin: 12px 0 5px;
+      font-weight: 600;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 1rem;
+    }
+    button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: var(--primary-dark);
+    }
+    #output {
+      margin-top: 20px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      text-align: center;
+    }
+    canvas {
+      margin-top: 30px;
+    }
+    footer {
+      text-align: center;
+      margin-top: 50px;
+      font-size: 0.9rem;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Disk Scheduling Algorithm Visualizer</h1>
+  </header>
+
+  <div class="container">
+    <label for="requests">Disk Requests (comma-separated):</label>
+    <input type="text" id="requests" placeholder="e.g. 82,170,43,140,24,16,190" />
+
+    <label for="head">Initial Head Position:</label>
+    <input type="number" id="head" placeholder="e.g. 50" />
+
+    <label for="algorithm">Select Algorithm:</label>
+    <select id="algorithm">
+      <option value="fcfs">FCFS</option>
+      <option value="sstf">SSTF</option>
+      <option value="scan">SCAN</option>
+      <option value="look">LOOK</option>
+      <option value="cscan">C-SCAN</option>
+      <option value="clook">C-LOOK</option>
+    </select>
+
+    <label for="direction">Initial Direction:</label>
+    <select id="direction">
+      <option value="right">Right</option>
+      <option value="left">Left</option>
+    </select>
+
+    <button onclick="visualize()">Visualize</button>
+
+    <div id="output"></div>
+    <canvas id="chart"></canvas>
+  </div>
+
+  <footer>
+    &copy; 2025 Disk Scheduling Visualizer. All rights reserved.
+  </footer>
+
+  <script>
+    function fcfs(requests, head) {
+      let sequence = [head], seekTime = 0;
+      for (let r of requests) {
+        seekTime += Math.abs(head - r);
+        head = r;
+        sequence.push(r);
+      }
+      return { sequence, seekTime };
+    }
+
+    function sstf(requests, head) {
+      let sequence = [head], seekTime = 0, reqs = [...requests];
+      while (reqs.length > 0) {
+        let closest = reqs.reduce((a, b) => Math.abs(a - head) < Math.abs(b - head) ? a : b);
+        seekTime += Math.abs(head - closest);
+        head = closest;
+        sequence.push(closest);
+        reqs.splice(reqs.indexOf(closest), 1);
+      }
+      return { sequence, seekTime };
+    }
+
+    function scan(requests, head, direction = 'right', diskSize = 200) {
+      let sequence = [head], seekTime = 0;
+      let left = requests.filter(r => r < head).sort((a,b) => b - a);
+      let right = requests.filter(r => r >= head).sort((a,b) => a - b);
+
+      if (direction === 'right') {
+        for (let r of right) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+        if (head !== diskSize - 1) {
+          seekTime += Math.abs(head - (diskSize - 1));
+          head = diskSize - 1;
+          sequence.push(head);
+        }
+        for (let r of left) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+      } else {
+        for (let r of left) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+        if (head !== 0) {
+          seekTime += head;
+          head = 0;
+          sequence.push(head);
+        }
+        for (let r of right) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+      }
+
+      return { sequence, seekTime };
+    }
+
+    function look(requests, head, direction = 'right') {
+      let sequence = [head], seekTime = 0;
+      let left = requests.filter(r => r < head).sort((a,b) => b - a);
+      let right = requests.filter(r => r >= head).sort((a,b) => a - b);
+
+      if (direction === 'right') {
+        for (let r of right) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+        for (let r of left) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+      } else {
+        for (let r of left) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+        for (let r of right) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+      }
+
+      return { sequence, seekTime };
+    }
+
+    function cscan(requests, head, direction = 'right', diskSize = 200) {
+      let sequence = [head], seekTime = 0;
+      let left = requests.filter(r => r < head).sort((a,b) => a - b);
+      let right = requests.filter(r => r >= head).sort((a,b) => a - b);
+
+      if (direction === 'right') {
+        for (let r of right) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+        if (head !== diskSize - 1) {
+          seekTime += Math.abs(head - (diskSize - 1));
+          head = diskSize - 1;
+          sequence.push(head);
+        }
+        seekTime += diskSize - 1;
+        head = 0;
+        sequence.push(head);
+        for (let r of left) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+      } else {
+        for (let r of left.reverse()) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+        if (head !== 0) {
+          seekTime += head;
+          head = 0;
+          sequence.push(head);
+        }
+        seekTime += diskSize - 1;
+        head = diskSize - 1;
+        sequence.push(head);
+        for (let r of right.reverse()) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+      }
+
+      return { sequence, seekTime };
+    }
+
+    function clook(requests, head, direction = 'right') {
+      let sequence = [head], seekTime = 0;
+      let left = requests.filter(r => r < head).sort((a,b) => a - b);
+      let right = requests.filter(r => r >= head).sort((a,b) => a - b);
+
+      if (direction === 'right') {
+        for (let r of right) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+        if (left.length > 0) {
+          seekTime += Math.abs(head - left[0]);
+          head = left[0];
+          sequence.push(head);
+          for (let i = 1; i < left.length; i++) {
+            seekTime += Math.abs(head - left[i]);
+            head = left[i];
+            sequence.push(head);
+          }
+        }
+      } else {
+        for (let r of left.reverse()) {
+          seekTime += Math.abs(head - r);
+          head = r;
+          sequence.push(r);
+        }
+        if (right.length > 0) {
+          seekTime += Math.abs(head - right[right.length - 1]);
+          head = right[right.length - 1];
+          sequence.push(head);
+          for (let i = right.length - 2; i >= 0; i--) {
+            seekTime += Math.abs(head - right[i]);
+            head = right[i];
+            sequence.push(head);
+          }
+        }
+      }
+
+      return { sequence, seekTime };
+    }
+
+    function visualize() {
+      const raw = document.getElementById("requests").value;
+      const head = parseInt(document.getElementById("head").value);
+      const algo = document.getElementById("algorithm").value;
+      const direction = document.getElementById("direction").value;
+      const requests = raw.split(",").map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+
+      if (isNaN(head) || requests.length === 0) {
+        alert("Please enter valid inputs.");
+        return;
+      }
+
+      let result;
+      switch (algo) {
+        case "fcfs": result = fcfs(requests, head); break;
+        case "sstf": result = sstf(requests, head); break;
+        case "scan": result = scan(requests, head, direction); break;
+        case "look": result = look(requests, head, direction); break;
+        case "cscan": result = cscan(requests, head, direction); break;
+        case "clook": result = clook(requests, head, direction); break;
+      }
+
+      document.getElementById("output").innerText = `Total Seek Time: ${result.seekTime}`;
+
+      new Chart(document.getElementById("chart"), {
+        type: 'line',
+        data: {
+          labels: result.sequence.map((_, i) => i),
+          datasets: [{
+            label: 'Head Movement',
+            data: result.sequence,
+            borderColor: '#007bff',
+            backgroundColor: '#007bff22',
+            tension: 0.2,
+            fill: true,
+            pointRadius: 5,
+            pointHoverRadius: 7
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Cylinder Number' }
+            },
+            x: {
+              title: { display: true, text: 'Sequence Order' }
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
